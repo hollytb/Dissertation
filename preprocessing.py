@@ -5,11 +5,31 @@ from nltk.corpus import stopwords
 from nltk import pos_tag
 from nltk.corpus import wordnet
 from nltk.stem import WordNetLemmatizer
+from collections import Counter
+import time
+import numpy as np
+import csv
+import nltk
+import contractions
+import en_core_web_sm
+import gensim.downloader as api
+from spellchecker import SpellChecker
+import re
+import spacy
+from spacy import displacy
+from collections import Counter
+import en_core_web_sm
+from nltk.tokenize import (MWETokenizer, word_tokenize)
 
-pd.set_option('display.max_columns', 40)
-pd.set_option('display.max_rows', 40)
+nlp = en_core_web_sm.load()
+
+nltk.download('words')
+
+# pd.set_option('display.max_rows', 40)
+
 
 my_punctuation = '€£' + punctuation
+en = spacy.load('en_core_web_sm')  # only load once
 
 
 def tokenize(comment):
@@ -23,6 +43,10 @@ def remove_punct_tokens(tokens):
 
 def word_count(comment):
     return len(comment.split())
+
+
+def comment_count(article):
+    return (article.value_counts)
 
 
 def question_mark(comment):
@@ -104,43 +128,103 @@ def remove_stopwords(tokens):
     """
     :param tokens: tokenized headline
     """
-    stop_words = set(stopwords.words('english'))
-    return [token for token in tokens if token not in stop_words]
+    sw_spacy = en.Defaults.stop_words
+    return [token for token in tokens if token not in sw_spacy and len(token) > 2]
 
 
-df = pd.read_csv("data/comments.csv", quotechar='"', skipinitialspace=True, dtype='string')
+def display_most_frequentwords(comments, max):
+    cnt = pd.Series(np.concatenate([str(x).split() for x in comments])).value_counts()
+    print("Most Frequent Words:" + str(cnt[:max]))
+    return cnt
+
+
+def most_rarewords(cnt, max):
+    rarewords = cnt[:-max - 1:-1]
+    print('Most Rare Words:' + str(rarewords))
+    return rarewords
+
+
+def remove_rarewords(tokens, rarewords):
+    return ' '.join([token for token in str(tokens).split() if token not in rarewords])
+
+
+s_time = time.time()
+# chunked_data = pd.read_csv("data/CommentsMarch2017.csv", skipinitialspace=True, usecols=['commentBody'], chunksize=10000)
+# , dtype='string', quotechar='"', skipinitialspace=True, usecols=['commentBody'],
+df_cM17 = pd.read_csv("data/cleanedCommentsM17.csv", usecols=['commentBody',
+                                                              'articleID'], index_col=0)  # , quoting=csv.QUOTE_NONE, error_bad_lines= False, low_memory=False
+df_aM17 = pd.read_csv(
+    "data/cleanedArticlesM17.csv", index_col=0)  # , quoting=csv.QUOTE_NONE, error_bad_lines= False, low_memory=False
+
+df = pd.merge(df_aM17, df_cM17, on='articleID')
+#df = df.loc[df['newDesk'] == 'Foreign']
+print(df.head())
+print(df.shape)
 
 # tokens for POS tagging and lemmatisation later
-df['text'] = tokenize(df['comment'])
-
+df['text'] = tokenize(df['commentBody'])
 df['text'] = df['text'].apply(remove_punct_tokens)
 
 # make lowercase
-df['comment'] = df['comment'].str.lower()
+# df['commentBody'] = df['commentBody'].str.lower()
 
 # text processing with strings BEFORE removing punctuation and stopwords
-df['word_count'] = df['comment'].apply(word_count)
-df['question_mark'] = df['comment'].apply(question_mark)
-df['exclamation_mark'] = df['comment'].apply(exclamation_mark)
-df['start_digit'] = df['comment'].apply(starts_with_digit)
-df['start_question'] = df['comment'].apply(starts_with_question_word)
+# df['word_count'] = df['comment'].apply(word_count)
+# df['question_mark'] = df['comment'].apply(question_mark)
+# df['exclamation_mark'] = df['comment'].apply(exclamation_mark)
+# df['start_digit'] = df['comment'].apply(starts_with_digit)
+# df['start_question'] = df['comment'].apply(starts_with_question_word)
 
-# remove punctuation
-df['comment'] = df['comment'].apply(remove_punctuation)
+# remove 1. contractions
+
+df['commentBody'] = df['commentBody'].apply(lambda x: [contractions.fix(token) for token in str(x).split()])
+df['commentBody'] = [' '.join(map(str, l)) for l in df['commentBody']]
+
+# remove 2. punctuation
+df['commentBody'] = df['commentBody'].str.replace('<br/><br/>', ' ')  # remove <br/
+df['commentBody'] = df['commentBody'].str.replace('<br/>', '')
+df['commentBody'] = df['commentBody'].apply(remove_punctuation)
+df['commentBody'] = df['commentBody'].str.replace('\d+', '')  # remove 3. numbers
 
 # tokenize
-df['comment'] = tokenize(df.comment)
+df['commentBody'] = tokenize(df.commentBody)
 
 # text processing with tokens
-df['longest_word_len'] = df['comment'].apply(longest_word_len)
-df['avg_word_len'] = df['comment'].apply(avg_word_len)
-df['ratio_stopwords'] = df['comment'].apply(ratio_stopwords)
+# df['longest_word_len'] = df['commentBody'].apply(longest_word_len)
+# df['avg_word_len'] = df['commentBody'].apply(avg_word_len)
+# df['ratio_stopwords'] = df['commentBody'].apply(ratio_stopwords)
 
 # lemmatisation
-df['text'] = df['text'].apply(pos_tagging)
-df['text'] = df['text'].apply(change_pos_tag)
-df['text'] = df['text'].apply(lemmatise)
-df['text'] = df['text'].apply(lambda x: [token.lower() for token in x])
-df['text'] = df['text'].apply(remove_stopwords)
+df['commentBody'] = df['commentBody'].apply(pos_tagging)
+df['commentBody'] = df['commentBody'].apply(change_pos_tag)
+df['commentBody'] = df['commentBody'].apply(lemmatise)
+df['commentBody'] = df['commentBody'].apply(lambda x: [token.lower() for token in x])
+df['commentBody'] = df['commentBody'].apply(remove_stopwords)
 
-df.to_csv(path_or_buf="data/features.csv")
+cnt = display_most_frequentwords(df['commentBody'], 100)
+rarewords = most_rarewords(cnt, 100)
+df['commentBody'] = df['commentBody'].apply(lambda x: remove_rarewords(x, rarewords))  # remove rare words
+
+# Other features:
+# df['comment_count'] = df.groupby('articleID').count()
+df['comment_count'] = df.groupby('articleID')['articleID'].transform('count')
+
+
+# preprocess keywords
+# preprocess  section Name must group middle east and asia pacific together
+# unbalanced by the looks of it
+tokenizer = MWETokenizer([('Middle', 'East'), ('Asia', 'Pacific'), ('College', 'Basketball'), ('Lesson', 'Plans'),
+                          ('Art', '&', 'Design'), ('Pro', 'Football'), ('Pro', 'Basketball'),
+                          ("401(k)'s", 'and', 'Similar', 'Plans'), ('Energy', '&', 'Environment'), ('Personal', 'Tech'),
+                          ('College', 'Football'), ('Paying', 'for', 'College'), ('Insider', 'Events')])
+df['sectionName'] = df['sectionName'].apply(lambda x: tokenizer.tokenize(str(x).split()))
+# with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.max_colwidth', None):  # more options can be specified also
+#    print(df['comment_count'])
+
+
+df.drop(columns=['source', 'webURL', 'byline', 'headline', 'snippet', 'text', 'documentType', 'typeOfMaterial',
+                 'newDesk', 'pubDate'], inplace=True)
+print(df.head())
+df.to_csv(path_or_buf="data/features.csv", index=False)  # , na_rep='Unknown'
+e_time = time.time()
+print('Time:', (e_time - s_time), 'seconds')
