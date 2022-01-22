@@ -1,66 +1,42 @@
 import nltk
-import numpy as np
-import pandas as pd
 from pandas import Series
-from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
-import matplotlib.pyplot as plt
-from sklearn.model_selection import KFold
 import math
-from ast import literal_eval
+from string import punctuation
 import seaborn as sns
-from sklearn.cluster import KMeans, MiniBatchKMeans
-from sklearn.manifold import TSNE
-from bokeh.models import ColumnDataSource, HoverTool
-from bokeh.palettes import Category20
-from bokeh.transform import linear_cmap
-from bokeh.io import show
-from bokeh.plotting import figure
-from sklearn.metrics import silhouette_samples, silhouette_score
-import time
-from scipy import sparse
-from sklearn.feature_selection import SelectKBest, chi2
-from sklearn.model_selection import KFold
-from sklearn.metrics import mean_squared_error, roc_auc_score
+from sklearn.cluster import MiniBatchKMeans
 from sklearn.dummy import DummyClassifier
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_curve
-from sklearn.metrics import auc
-from sklearn.linear_model import LogisticRegression
 from sklearn.linear_model import LinearRegression
-from sklearn.linear_model import Ridge
-from sklearn.preprocessing import PolynomialFeatures
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.model_selection import KFold
+from sklearn.metrics import silhouette_score
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from scipy import sparse
+from sklearn.feature_extraction.text import CountVectorizer
+import collections
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import mean_squared_error, roc_auc_score
-from sklearn.dummy import DummyClassifier
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.metrics import recall_score, precision_score
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_curve
-from sklearn.metrics import auc
-from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.feature_extraction.text import TfidfVectorizer
-from scipy import sparse
 from sklearn.svm import SVC
-from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.feature_selection import SelectKBest, chi2
-import collections
 
 nltk.download("punkt")
+my_punctuation = '€£' + punctuation
+plt.rcParams.update(plt.rcParamsDefault)
+
+plt.style.use('seaborn-pastel')
 
 
 def identity_tokenizer(text):
     return text
 
 
-# for k means
-def k_fold_cross_val2(k, model, input):
+def k_fold_cross_val_unsupervised(k, model, input):
     print(f"=== KFOLD k={k} ===")
     k_fold = KFold(n_splits=k, shuffle=True)
     m = 0
@@ -77,7 +53,7 @@ def k_fold_cross_val2(k, model, input):
     return mean, std
 
 
-def k_fold_cross_val(k, model, input, y):
+def k_fold_cross_val_supervised(k, model, input, y):
     print(f"=== KFOLD k={k} ===")
     k_fold = KFold(n_splits=k, shuffle=True)
     sq_errs = []
@@ -105,55 +81,55 @@ def error_plot(x, means, yerr, title, x_label):
     plt.show()
 
 
-def print_results(preds, y_vals, title):
-    print("===" + title + "===")
-    # print(f"Confusion Matrix:\n{confusion_matrix(y_vals, preds)}")
-    # f"\nAccuracy:{accuracy_score(y_vals, preds)}"
-    # f"\nRecall:{recall_score(y_vals, preds)}"
-    # f"\nF1:{f1_score(y_vals, preds)}"
-    # f"\nPrecision:{precision_score(y_vals, preds)}")
-    print(confusion_matrix(y_vals, preds))
-
-
-def plot_top_features(classifier, coef_dict):
-    model_coefs = pd.DataFrame(classifier.coef_)  # changed from dataframe to series
-    coefs_df = model_coefs.T
-    feature_name_list = list(X_ef.columns)
-
-    # list w/ eng'd features & tf-idf n-grams
-    all_feat_names = []
-    for i in feature_name_list:
-        all_feat_names.append(i)
-
-    for i in tfidf.get_feature_names():
-        all_feat_names.append(i)
-
-    # creating column for feat names
-    coefs_df['feats'] = pd.Series(all_feat_names)
-    coefs_df.set_index('feats', inplace=True)
-    coefs_df['feats'] = pd.Series(all_feat_names)
-    coefs_df.set_index('feats', inplace=True)
-
-    # plot non-cb
-    coefs_df[0].sort_values(ascending=True).head(20).plot(kind='bar')
-    plt.title("SVM: Top 20 Non-Clickbait Coefs")
-    # plt.title("LogReg: Top 20 Non-Clickbait Coefs")
-    plt.xlabel("features")
-    plt.ylabel("coef value")
-    plt.xticks(rotation=55)
+def plot_coeff(features_col, model):
+    coeff_parameter = pd.DataFrame(model.coef_.T, features_col, columns=['coefficient'])
+    coeff_parameter.sort_values(by='coefficient', ascending=True).head(30).plot(
+        kind='barh', figsize=(9, 7), title='Negative Top 25 Features', ylabel='feature')
+    coeff_parameter.sort_values(by='coefficient', ascending=False).head(30).plot(
+        kind='barh', figsize=(9, 7), title='Positive Top 25 Features', ylabel='feature')
     plt.show()
 
-    # plot CB classification
-    # coefs_df[0].sort_values(ascending=False).head(20).plot(kind='bar', color='orange')
-    # plt.title("SVM: Top 20 Clickbait Coefs")
-    # plt.title("LogReg: Top 20 Clickbait Coefs")
-    # plt.xlabel("features")
-    # plt.ylabel("coef value")
-    # plt.xticks(rotation=55)
-    # plt.show()
+
+def print_results_regression(title, model, X, y):
+    print("===" + title + "===")
+    print(f"R2 Score:\n{model.score(X, y)}"
+          f"\nIntercept:{model.intercept_}"
+          f"\nCoefficients:{model.coef_}"
+          f"\nNumber of Cofeficients:{len(model.coef_)}")
 
 
-def plot_frequent_keywords(tokens):
+def print_results_classification(preds, y_vals, title):
+    print("===" + title + "===")
+    print(f"Confusion Matrix:\n{confusion_matrix(y_vals, preds)}"
+          f"\nAccuracy:{accuracy_score(y_vals, preds)}"
+          f"\nRecall:{recall_score(y_vals, preds)}"
+          f"\nF1:{f1_score(y_vals, preds)}"
+          f"\nPrecision:{precision_score(y_vals, preds)}")
+
+
+def plot_words_with_number_comments(df_boxplot, x, y, top_words, title, x_label, y_label):
+    # Create dataframe of top keywords and the number of comments they elicit
+    df_boxplot = pd.concat([Series(row[x], row[y].split("', '"))
+                            for _, row in df_boxplot.iterrows()]).reset_index()
+
+    # Preprocess keywords
+    df_boxplot['index'] = df_boxplot['index'].str.replace("[", '')
+    df_boxplot['index'] = df_boxplot['index'].str.replace("]", '')
+    df_boxplot['index'] = df_boxplot['index'].str.replace("'", '')
+    # Remove keywords not in the top 25
+    df_boxplot = df_boxplot[df_boxplot['index'].isin(top_words)]
+
+    # plot box plot
+    sns.catplot(x=0, y='index', data=df_boxplot, kind='box', orient="h", linewidth=0.5, fliersize=1, aspect=1.5)
+    plt.title(title)
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_frequent_words(tokens, title):
     # count frequency of words and store in dict
     cv = CountVectorizer(tokenizer=identity_tokenizer, lowercase=False)
     words_cv = cv.fit_transform(tokens)
@@ -165,314 +141,336 @@ def plot_frequent_keywords(tokens):
     # list words and counts
     top_words = []
     for word, count in word_counter.most_common(25):
-        print("Top 10 Article Keywords:")
+        print("Top 10:")
         print(word, ": ", count)
         str(word).replace("'", '')
         top_words.append(word)
 
     # plot words and counts
     lst = word_counter.most_common(25)
-    df = pd.DataFrame(lst, columns=['Word', 'Count'])
-    df.plot.barh(x='Word', y='Count', rot=5)
-    plt.title("Top 25 Article Keywords ")
+    df = pd.DataFrame(lst, columns=['word', 'count'])
+    df.plot.barh(x='word', y='count')
+    plt.title(title)
     plt.show()
 
-    # Create dataframe of top keywords and the number of comments they elicit
-    df_boxplot = pd.read_csv("data/features.csv")
-    df_boxplot.sort_values('articleID', inplace=True)  # this is duplicate code which should be refactored
-    df_boxplot.drop_duplicates(subset="articleID", keep="first", inplace=True)
-
-    df_boxplot = pd.concat([Series(row['comment_count'], row['keywords'].split("', '"))
-                            for _, row in df_boxplot.iterrows()]).reset_index()
-    # Preprocess keywords
-    df_boxplot['index'] = df_boxplot['index'].str.replace("[", '')
-    df_boxplot['index'] = df_boxplot['index'].str.replace("]", '')
-    df_boxplot['index'] = df_boxplot['index'].str.replace("'", '')
-    # Remove keywords not in the top 25
-    df_boxplot = df_boxplot[df_boxplot['index'].isin(top_words)]
-
-    # plot box plot
-    sns.boxplot(x=0, y='index', data=df_boxplot, orient="h")
-    plt.title('Top Keywords & No.Comments')
-    plt.xlabel('number of comments');
-    plt.ylabel('keyword')
-    plt.show()
+    return top_words
 
 
-s_time = time.time()
-normalised_csv = "data/normalised.csv"
+def data_handling(file, text, drop_cols, y_val):
+    df = pd.read_csv(file)
+    df[text] = df[text].apply(eval)
+    print(df.head())
+    features = df.drop(columns=drop_cols)
+    y = df[y_val].to_numpy()
+    print(np.array(np.unique(y, return_counts=True)).T)
+    print(y.shape)
+    return features, y, df
 
-# df = pd.read_csv(normalised_csv, index_col=0)
-# df["text"] = df["text"].apply(eval)
-# tfidf = TfidfVectorizer(stop_words = "english", tokenizer=identity_tokenizer, ngram_range=(1, 1), lowercase=False, max_df=0.2)
-# tfidf_text = tfidf.fit_transform(df['text']).toarray()
-# tfidf_tokens = tfidf.get_feature_names_out()
 
-# print("Number of comments:",len(tfidf_text))
-# print(f"Number of unique words in {len(tfidf_text)} comments:", len(tfidf_tokens))
-## for i in tfidf_tokens:
-#    print(i)
+def vectorization(features, text):
+    tfidf = TfidfVectorizer(tokenizer=identity_tokenizer, ngram_range=(1, 1), lowercase=False)
+    X_ef = features.drop(columns=[text])
+    print(X_ef.head())
+    tfidf_text = tfidf.fit_transform(features[text])
+    X = sparse.hstack([X_ef.astype(float), tfidf_text]).tocsr()
+    feature_columns = np.concatenate((X_ef.keys().to_numpy(), tfidf.get_feature_names_out()), axis=None)
+    return X, feature_columns, tfidf_text, tfidf
 
-# Model 1 - MiniBatchKMeans
-# print("\n=== K MEANS ===")
+
+def linear_model(X, y, feature_columns, title):
+    print("\nLINEAR REGRESSION FOR " + title)
+    print(article_X.shape)
+    print(article_y.shape)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=20, test_size=0.3)
+    model = LinearRegression().fit(X_train, y_train)
+    pred = model.predict(X_test)  # predictions = pred.reshape(-1, 1)
+    print('MSE : ', mean_squared_error(y_test, pred))
+    print('RMSE : ', np.sqrt(mean_squared_error(y_test, pred)))
+    print_results_regression('Linear Regression Model', model, X_train, y_train)
+    plot_coeff(feature_columns, model)
+    return X_train, X_test, y_train, y_test
+
+
+def categorize_sentiment(x):
+    if x > 0:
+        return 'Positive'
+    elif x == 0:
+        return 'Netural'
+    else:
+        return 'Negative'
+
+
+def print_sentiment_comments(int_label, text_label):
+    print("\n10 comments with highest " + text_label + " sentiment polarity:")
+    comments = non_norm_comment_df.loc[non_norm_comment_df['sentiment'] == int_label, ['comment']].sample(10).values
+    for comment in comments:
+        print(comment[0])
+
+
+# ----------------------------------
+# Articles File
+article_features, article_y, article_df = data_handling("data/normalised0.csv", 'keywords',
+                                                        ['comment_count', 'section_name', 'article_id'],
+                                                        'comment_count')
+article_X, article_feat_cols, article_tfidf_text, article_tfidf = vectorization(article_features, 'keywords')
+
+# Supervised Regression for Articles
+# Graphs:
+
+# 1. number of comments that mention Trump but are not under Trump articles
+plt.pie(article_df['trump_article'].value_counts(), labels=('not trumpArticles', 'trumpArticles'), autopct='%.0f%%');
+plt.title('All articles')
+plt.show()
+
+# 2. Most frequent keywords for articles and Keywords elicit more comments
+
+top_words = plot_frequent_words(article_features['keywords'], 'Top 25 Keywords from Articles')
+non_norm_article_df = pd.read_csv("data/featuresArticlesTest.csv")
+
+plot_words_with_number_comments(non_norm_article_df, 'comment_count', 'keywords', top_words,
+                                'Top Keywords &No.Comments', 'comments', 'word')
+# Models:
+# 1.Linear Regression
+linear_model(article_X, article_y, article_feat_cols,
+             "ARTICLES")  # Run simple linear regression to see if Trump is a significant
+
+# ----------------------------------
+# Comments File
+comment_features, comment_y, comment_df = data_handling("data/normalised1.csv", 'comment',
+                                                        ['comment_count', 'section_name', 'gets_reply', 'keywords',
+                                                         'article_id'],
+                                                        'gets_reply')
+comment_X, comment_feat_cols, comment_tfidf_text, comment_tfidf = vectorization(comment_features, 'comment')
+
+# Supervised Regression for Comments
+# Graphs:
+
+# 1.
+non_norm_comment_df = pd.read_csv("data/featuresCommentsTest.csv")
+plt.pie(non_norm_comment_df.loc[non_norm_comment_df['trump_article'] == 0, 'trump_comment'].value_counts(),
+        labels=('not trumpComment', 'trumpComment'),
+        autopct='%.0f%%')
+plt.title('All articles that are not Trump related')
+plt.show()
+
+# 2.
+plt.pie(non_norm_comment_df.loc[non_norm_comment_df['trump_article'] == 1, 'trump_comment'].value_counts(),
+        labels=('not trumpComment', 'trumpComment'),
+        autopct='%.0f%%')
+plt.title('All articles that are Trump related')
+plt.show()
+
+# 3.
+sns.barplot(x='trump_article', y='recommendations', hue='trump_comment',
+            data=non_norm_comment_df)
+plt.title('Non-Trump/Trump articles with comments and recommendations')
+plt.show()
+
+# 4.  Most frequent words in comments and words that elicit more recommendations
+top_words_comments = plot_frequent_words(comment_features['comment'], 'Top 25 Words from Comments')
+plot_words_with_number_comments(non_norm_comment_df, 'recommendations', 'comment', top_words_comments,
+                                'Top Words & No.Recommendations', 'recommendations', 'word')
+
+# 5.
+non_norm_comment_df['sentiment_label'] = non_norm_comment_df['sentiment'].apply(lambda x: categorize_sentiment(x))
+non_norm_comment_df['sentiment_label'].value_counts().T.plot(kind='bar', rot=0, fontsize=30, color=['C1', 'C2', 'C0'])
+plt.title('The sentiment label of comments', fontsize=30)
+plt.show()
+
+# 6. print the highest value positive/negative/neutral comment
+print_sentiment_comments(1, 'positive')
+print_sentiment_comments(-1, 'negative')
+print_sentiment_comments(0, 'neutral')
+
+# 7. print the distribution of sentiment polarity of comments
+sns.distplot(non_norm_comment_df['sentiment'])
+plt.title("Distribution of sentiment polarity of comments")
+plt.show()
+
+# Models
+# 1. Linear Regression (run simple linear regression to see if Trump is a significant):
+X_train_com, X_test_com, y_train_com, y_test_com = linear_model(comment_X, comment_y, comment_feat_cols, "COMMENTS")
+
+# Supervised Classification for Comments
+# Graphs:
+
+# 1. plot the distribution of target variable to see if class is balanced
+plot = sns.countplot(comment_df['gets_reply'])
+plot.set_xticklabels(['No Reply','Reply'])
+plt.show()
+
+# Models:
+# 1. Logistic Regression
+print("\n=== LOGISTIC REGRESSION | L2 PENALTY ===")
+# Cross Validation for hyperparameter C:
+c_range = [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+means = []
+std_devs = []
+for C in c_range:
+    log_clf = LogisticRegression(C=C, class_weight='balanced', solver='liblinear')
+    res = k_fold_cross_val_supervised(5, log_clf, comment_X, comment_y)
+    means.append(res[0])
+    std_devs.append(res[1])
+
+log_c_vals = np.log10(c_range)
+error_plot(log_c_vals, means, std_devs, 'LogReg: L2 penalty, varying C', 'log10(C)')
+
+# Logistic Regression model with chosen hyper-parameters:
+log_clf = LogisticRegression(C=10, class_weight='balanced', solver='liblinear')
+print(X_train_com.shape)
+print(X_test_com.shape)
+
+# ROC curve plotting
+log_clf.fit(X_train_com, y_train_com)
+prediction = log_clf.predict_proba(X_test_com)
+
+fpr, tpr, _ = roc_curve(y_test_com, prediction[:, 1])
+auc_score = roc_auc_score(y_test_com, prediction[:, 1])
+print("AUC Score:", auc_score)
+plt.plot(fpr, tpr, color='blue', label='Logistic Regression')
+
+# predictions
+log_clf.fit(X_train_com, y_train_com)
+preds_train_com = log_clf.predict(X_train_com)
+preds_test_com = log_clf.predict(X_test_com)
+
+print_results_classification(preds_train_com, y_train_com, "LogReg train")
+print_results_classification(preds_test_com, y_test_com, "LogReg test")
+plot_coeff(comment_feat_cols, log_clf)
+
+# 2. Gaussian kernel SVM (SVC) model
+print("\n=== SVC, Gaussian Kernel ===")
+#c_range = [0.001, 1, 1000]
+#gammas = [1, 2, 5, 8, 10]
+#for C in c_range:
+#    means = []
+#    std_devs = []
+#    for g in gammas:
+#        rbf_svc = SVC(C=C, kernel='rbf', gamma=g)
+#        results = k_fold_cross_val_supervised(5, rbf_svc, comment_X, comment_y)
+#        means.append(results[0])
+#        std_devs.append(results[1])
+#    plt.errorbar(gammas, means, yerr=std_devs, fmt='.', capsize=5, label=C)
+#    plt.plot(gammas, means, linestyle=':', linewidth=2)
+#plt.ylabel('mean square error')
+#plt.xlabel('gamma')
+#plt.title('MSE: varying C and γ')
+#plt.legend(title='C')
+#plt.show()
+
+# SVC Model with chosen parameters
+svc = SVC(C=1, kernel='rbf', gamma=5, cache_size=1200, probability=True)
+
+# roc curve
+svc.fit(X_train_com, y_train_com)
+prediction = svc.predict_proba(X_test_com)
+fpr, tpr, _ = roc_curve(y_test_com, prediction[:, 1])
+auc_score = roc_auc_score(y_test_com, prediction[:, 1])
+print("AUC Score:", auc_score)
+plt.plot(fpr, tpr, color='orange', label='SVC (Gaussian)')
+
+# predictions
+svc.fit(X_train_com, y_train_com)
+preds_train = svc.predict(X_train_com)
+print_results_classification(preds_train, y_train_com, "SVC train")
+preds_test = svc.predict(X_test_com)
+print_results_classification(preds_test, y_test_com, "SVC test")
+
+
+# 3. kNN
+print("\n=== kNN ===")
+
+# Cross Validation for hyperparameter n_neighbors:
+#neighbours = [1, 3, 5, 7, 9]
+#means = []
+#stds = []
+#for n in neighbours:
+#    knn_clf = KNeighborsClassifier(n_neighbors=n, weights='uniform')
+#    res = k_fold_cross_val_supervised(5, knn_clf, comment_X, comment_y)
+#    knn_clf.score(comment_X, comment_y)
+#    means.append(res[0])
+#    stds.append(res[1])
+#error_plot(neighbours, means, stds, 'Prediction Error: varying n_neighbors parameters', 'n_neighbors')
+## kNN model with chosen hyperparameter:
+knn = KNeighborsClassifier(n_neighbors=5, weights='uniform', n_jobs=2)
+
+knn.fit(X_train_com, y_train_com)
+prediction = knn.predict_proba(X_test_com)
+fpr, tpr, _ = roc_curve(y_test_com, prediction[:, 1])
+auc_score = roc_auc_score(y_test_com, prediction[:, 1])
+print("AUC Score:", auc_score)
+plt.plot(fpr, tpr, color='red', label='K-Neighbours')
+
+
+knn.fit(X_train_com, y_train_com)
+preds_train = knn.predict(X_train_com)
+preds_test = knn.predict(X_test_com)
+
+print_results_classification(preds_train, y_train_com, "KNN train")
+print_results_classification(preds_test, y_test_com, "KNN test")
+
+# 4. baseline classifier
+dummy = DummyClassifier(strategy='most_frequent')
+dummy.fit(X_train_com, y_train_com)
+preds_train = dummy.predict(X_train_com)
+preds_test = dummy.predict(X_test_com)
+
+print_results_classification(preds_train, y_train_com, "Dummy train")
+print_results_classification(preds_test, y_test_com, "Dummy test")
+
+# baseline confusion matrix for plotting point
+matrix = confusion_matrix(y_train_com, preds_train)
+
+most_freq_fpr = matrix[0][1] / (matrix[0][1] + matrix[0][0])  # FP / (FP + TN)
+most_freq_tpr = matrix[1][1] / (matrix[1][1] + matrix[1][0])  # TP / (TP + FN)
+
+plt.plot(most_freq_fpr, most_freq_tpr, label='Most Frequent Clf.', marker='o', linestyle='None')
+plt.xlabel('False positive rate')
+plt.ylabel('True positive rate')
+plt.plot([0, 1], [0, 1], color='green', linestyle='--')
+plt.title('ROC curves for the chosen classifiers')
+plt.legend()
+plt.show()  # ROC plot
+
+# Unsupervised learning
+
+# Model:
+# 1. MiniBatchKMeans
+print("\n=== K MEANS ===")
 
 # Cross Validation for hyper-parameter n_clusters:
-# K_range = range(5, 50, 5)
-# means = []
-# std_devs = []
-# for K in K_range:
-#    gmm = MiniBatchKMeans(n_clusters=K)
-#    res = k_fold_cross_val(5, gmm, tfidf_text)
-#    means.append(res[0])
-#    std_devs.append(res[1])
-# log_k_vals = np.log10(K_range)
-# error_plot(log_k_vals, means, std_devs, 'MiniBatchKMeans: varying clusters', 'log10(number of clusters)')
+K_range = range(5, 50, 5)
+means = []
+std_devs = []
+for K in K_range:
+    gmm = MiniBatchKMeans(n_clusters=K)
+    res = k_fold_cross_val_unsupervised(5, gmm, comment_tfidf_text)
+    means.append(res[0])
+    std_devs.append(res[1])
+log_k_vals = np.log10(K_range)
+error_plot(log_k_vals, means, std_devs, 'MiniBatchKMeans: varying clusters', 'log10(number of clusters)')
 
 # MiniBatchKMeans model with chosen hyper-parameter:
-# k = 10
-# t0 = time.time()
+k = 10
+gmm = MiniBatchKMeans(n_clusters=k, verbose=1).fit(comment_tfidf_text)
 
-# gmm = MiniBatchKMeans(n_clusters=k, verbose=1).fit(tfidf_text)
-# t_batch = time.time() - t0
-# print("MiniBatchKMeans train time: %.2fs\ninertia: %f" % (t_batch, gmm.inertia_))
+terms = comment_tfidf.get_feature_names_out()
+centers = gmm.cluster_centers_.argsort()[:, ::-1]
+for i in range(0, k):
+    word_list = []
+    for j in centers[i, :25]:
+        word_list.append(terms[j])
+    print("cluster%d:" % i)
+    print(word_list)
+labels = gmm.predict(comment_tfidf_text)
+count = 0
+print('\nsimiliar comments:')
+for j in range(0, labels.shape[0]):
+    if labels[j] == 0:
+        print('\n' + str(comment_df['comment'].iloc[j]))
+        count = count + 1
+        if count >= 5:
+            break
 
-
-# centers = gmm.cluster_centers_.argsort()[:, ::-1]
-# for i in range(0, k):
-#    word_list = []
-#    for j in centers[i, :25]:
-#        word_list.append(tfidf_tokens[j])
-#    print("cluster%d:" % i)
-#    print(word_list)
-
-# labels = gmm.predict(tfidf_text)
-# count = 0
-# print("\nsimiliar comments:")
-# for j in range(0, labels.shape[0]):
-#    if labels[j] == 0:
-#        print("\n" + df["commentBody"].iloc[j])
-#        count = count + 1
-#        if count >= 5:
-#            break
-
-
-# silhouette_avg = silhouette_score(tfidf_text, labels)
-# print("For n_clusters =",k,"The average silhouette_score is :",silhouette_avg,)
-
-# REVISIT VISUALIZING CLUSTERS
-# Visualize clusters
-# tsne = TSNE(n_components=3, perplexity=80)  # , verbose=1, perplexity=140, n_iter=5000, learning_rate=100
-# tsne_scale_results = tsne.fit_transform(tfidf_text)
-# tsne_df_scale = pd.DataFrame(tsne_scale_results, columns=['tsne1', 'tsne2', 'tsne3'])
-# kmeans_tsne_scale = KMeans(n_clusters=k).fit(
-#    tsne_df_scale)  # n_init=100, max_iter=400, init='k-means++', random_state=42
-
-# plt.figure(figsize=(15, 15))
-# labels_tsne_scale = kmeans_tsne_scale.labels_
-# sns.scatterplot(tsne_df_scale.iloc[:, 0], tsne_df_scale.iloc[:, 1], hue=labels_tsne_scale, palette='Set1', s=100,
-#                alpha=0.6).set_title('Cluster Vis tSNE Scaled Data', fontsize=15)
-# plt.tight_layout();
-# plt.legend()
-# plt.show()
-
-# Cross Validation for hyper-parameter n_clusters:
-# means = []
-# std_devs = []
-# for K in K_range:
-#    gmm = KMeans(n_clusters=K)
-#    res = k_fold_cross_val(5, gmm, tsne_df_scale)
-#    means.append(res[0])
-#    std_devs.append(res[1])
-# log_k_vals = np.log10(K_range)
-# error_plot(log_k_vals, means, std_devs, 'KMeans: varying clusters with tSNE_Scaled Data', 'log10(number of clusters)')
-# error_plot(K_range, means, std_devs, 'KMeans: varying clusters with tSNE_Scaled Data', 'number of clusters')
-
-
-# Visualize clusters with 3d graph
-# merged_frame_rolled_up = df  # .groupby(['ID','comment']).mean().reset_index()
-# merged_frame_rolled_up['tsne-2d-one'] = tsne_df_scale.iloc[:, 0]
-# merged_frame_rolled_up['tsne-2d-two'] = tsne_df_scale.iloc[:, 1]
-# merged_frame_rolled_up['labels'] = labels_tsne_scale
-
-# data sources
-# source = ColumnDataSource(data=dict(
-#    x=merged_frame_rolled_up['tsne-2d-one'].values,
-#    y=merged_frame_rolled_up['tsne-2d-two'].values,
-#    desc=merged_frame_rolled_up['labels'].values,
-#    titles=merged_frame_rolled_up['commentBody'].values
-# ))
-
-# hover over information
-# hover = HoverTool(tooltips=[
-#    ("Title", "@titles")
-# ])
-# map colors
-# mapper = linear_cmap(field_name='desc',
-#                     palette=Category20[len(merged_frame_rolled_up['labels'].unique())],
-#                     low=min(merged_frame_rolled_up['labels'].values),
-#                     high=max(merged_frame_rolled_up['labels'].values))
-# prepare the figure
-
-# p = figure(plot_width=1000, plot_height=1000,
-#           tools=[hover, 'pan', 'wheel_zoom', 'box_zoom', 'reset'],
-#           title="Clustering Comments Based on K Means, TfidfVectorizer and",
-#           toolbar_location="right")
-# plot
-# p.scatter('x', 'y', size=5,
-#          source=source,
-#          fill_color=mapper,
-#          line_alpha=0.3,
-#          line_color="black")
-
-# show(p)
-# e_time = time.time()
-# print("Time: ", (e_time - s_time), "seconds")
-
-# Predicting the number of comments
-# df2 = pd.read_csv(normalised_csv)
-# features2 = df2.drop(columns=['commentBody'])
-# features2.to_csv(path_or_buf="data/features1.csv")
-# features2.sort_values('articleID', inplace=True)
-# features2.drop_duplicates(subset="articleID", keep="first", inplace=True)
-# features2.to_csv(path_or_buf="data/features2.csv")
-from string import punctuation
-
-df2 = pd.read_csv("data/features2.csv", index_col=0)
-my_punctuation = '€£' + punctuation
-with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.max_colwidth',
-                       None):  # more options can be specified also
-    print(df2.head())
-# df2['keywords'] = df2['keywords'].apply(lambda y: [token.lower() for token in y if token.isalpha()])
-# df2['keywords'] = [' '.join(map(str, l)) for l in df2['keywords']]
-
-
-df2['keywords'] = df2['keywords'].apply(eval)
-
-# df2['sectionName'] = df2['sectionName'].apply(eval)
-features = df2.drop(columns=['comment_count', 'articleID', 'sectionName'])
-y = df2['comment_count'].to_numpy()
-# print(np.array(np.unique(y, return_counts=True)).T)
-print(y.shape)
-
-tfidf = TfidfVectorizer(tokenizer=identity_tokenizer, ngram_range=(1, 1), lowercase=False,
-                        max_features=100)
-
-tfidf_text = tfidf.fit_transform(features['keywords'])
-print("YUP")
-print(tfidf.vocabulary_)
-# tfidf2 = TfidfVectorizer(stop_words='english', tokenizer=identity_tokenizer, ngram_range=(1, 1), lowercase=False,
-#                         )
-# tfidf_text2 = tfidf2.fit_transform(features['sectionName'])
-
-X_ef = features.drop(columns='keywords')
-X = sparse.hstack([X_ef, tfidf_text]).tocsr()  # tfidf_text2
-print(X.shape)
-print(y.shape)
-
-# with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.max_colwidth', None):  # more options can be specified also
-#    print(tfidf_tokens)
-# print(tfidf2.get_feature_names_out())
-#################################
-# model 1 - Linear Ridge
-print("\n=== LINEAR RIDGE | L2 PENALTY ===")
-# Cross Validation for hyperparameter alpha:
-# a_range = [5, 10, 20, 30, 40]
-# means = []
-# std_devs = []
-# for A in a_range:
-#    lin_ridge_clf = Ridge(alpha=A)
-#    res = k_fold_cross_val(5, lin_ridge_clf, X, y)
-#    means.append(res[0])
-#    std_devs.append(res[1])
-# log_a_vals = np.log10(a_range)
-# error_plot(log_a_vals, means, std_devs, 'LinRidge: varying Alpha', 'log10(A)')
-
-X_train, X_test, y_train, y_test = train_test_split(X, y)  # , random_state=20, test_size=0.3
-print(X_train.shape)
-print(X_test.shape)
-lin_ridge = Ridge(alpha=20).fit(X_train, y_train)
-pred = lin_ridge.predict(X_test)
-predictions = pred.reshape(-1, 1)
-print(lin_ridge.intercept_)
-print("TEST")
-print(lin_ridge.coef_)
-
-print('MSE : ', mean_squared_error(y_test, predictions))
-print('RMSE : ', np.sqrt(mean_squared_error(y_test, predictions)))
-
-# coefficients = pd.DataFrame({"names":tfidf.get_feature_names(),
-# "coef":lin_ridge.coef_})
-# coefficients.sort_values("coef", ascending=False).head(10)
-coef_dict = {}
-for coef, feat in zip(lin_ridge.coef_, tfidf.get_feature_names()):
-    coef_dict[feat] = coef
-
-print(coef_dict)
-new = coef_dict.keys()
-feature_name_list = coef_dict.values()
-print(coef_dict)
-print("TEST AGAIN:")
-print(len(lin_ridge.coef_))
-print("AND AGAIN")
-print(len(tfidf.get_feature_names()))
-df2 = pd.read_csv("data/features.csv")
-df_corr = abs(df2.corr().sort_values(by='comment_count', ascending=False))[['comment_count']]
-# sns.heatmap(df2.corr())
-df_small = df2[df_corr[df_corr['comment_count'] > 0].index.tolist()]
-df_small.to_csv(path_or_buf="data/small.csv")
-# sns.heatmap(features.corr())
-from statsmodels.stats.outliers_influence import variance_inflation_factor
-
-# plot_top_features(lin_ridge, coef_dict)
-
-# coefs_df = pd.DataFrame.from_dict(coef_dict)
-
-# coefs_df.index[0].sort_values(ascending=True).head(20).plot(kind='bar')
-# plt.title("SVM: Top 20 Non-Clickbait Coefs")
-# plt.title("LogReg: Top 20 Non-Clickbait Coefs")
-# plt.xlabel("features")
-# plt.ylabel("coef value")
-# plt.xticks(rotation=55)
-# plt.show()
-
-# vals = sorted(coef_dict.values(), reverse=False)
-# top = vals[:5]
-
-# test = vals.index(0,4)
-
-# vals2 = sorted(coef_dict.keys(), reverse=False)
-# top2 = vals2[:5]
-# print(top2)
-# x = top2
-sorted_dict = {}
-sorted_keys = sorted(coef_dict, reverse=True, key=coef_dict.get)
-for w in sorted_keys:
-    sorted_dict[w] = coef_dict[w]
-
-print(sorted_dict)
-top = [v for v in list(sorted_dict.values())[:3]]
-
-x = [v for v in list(sorted_dict.keys())[:3]]
-fig, ax = plt.subplots()
-
-ax.bar(x, top, width=0.1, color='m')
-
-ax.set_xticks(x)
-ax.set_xticklabels(x)
-ax.set_xlabel("This graph shows amount of protocols used")
-ax.set_ylabel("Number of times used")
-ax.grid('on')
-
-# Most frequent keywords for articles
-# Keywords elicit more comments
-plot_frequent_keywords(features["keywords"])
-
-# run simple linear regression to see if Trump os a significant
-# predictor of how many comments an article will get
-# create a new feature
-df3 = pd.read_csv("data/features2.csv")
-df3["trumpMention"] = df3["keywords"].apply(lambda x: "Trump, Donald J" in x)
-
-with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.max_colwidth',
-                       None):  # more options can be specified also
-    print(df3.head())
+silhouette_avg = silhouette_score(comment_tfidf_text, labels)
+print('For n_clusters =', k, 'The average silhouette_score is :', silhouette_avg)
