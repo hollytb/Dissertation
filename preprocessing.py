@@ -14,6 +14,7 @@ from collections import Counter
 import en_core_web_sm
 from nltk.tokenize import (MWETokenizer, word_tokenize)
 import datetime as dt
+from bs4 import BeautifulSoup
 
 from textblob import TextBlob
 
@@ -157,15 +158,14 @@ def has_reply(comment, reply):
         return 0
 
 
-
-
 df_cM17 = pd.read_csv("data/cleanedCommentsM17.csv",
                       usecols=['commentBody', 'articleID', 'recommendations', 'parentID',
                                'commentID', 'depth', 'approveDate'])
 df_aM17 = pd.read_csv("data/cleanedArticlesM17.csv", usecols=['articleID', 'articleWordCount', 'keywords', 'newDesk',
                                                               'pubDate', 'sectionName', 'typeOfMaterial'], index_col=0)
 df = pd.merge(df_aM17, df_cM17, on='articleID')  # Merge articles with corresponding comments
-df = df.loc[df['newDesk'] == 'Foreign']
+#df = df.loc[df['newDesk'] == 'Magazine']
+
 print(df.head())
 print(df.shape)
 
@@ -183,6 +183,15 @@ df.rename(
         'parentID': 'parent_id'},
     inplace=True)
 
+
+
+s = df['new_desk'].value_counts()
+df = df[df.isin(s.index[s > 714]).values]
+df = df.groupby('new_desk', group_keys=False).apply(lambda x: x.sample(714))
+print(df['new_desk'].value_counts())
+
+print(df.head())
+print(df.tail())
 # Tokens for POS tagging and lemmatisation later
 df['text'] = tokenize(df['comment_body'])
 df['text'] = df['text'].apply(remove_punct_tokens)
@@ -194,7 +203,7 @@ df['question_mark'] = df['comment_body'].apply(question_mark)
 df['exclamation_mark'] = df['comment_body'].apply(exclamation_mark)
 
 # Remove urls
-df['comment'] = df['comment_body'].replace(r'https\S+', ' ', regex=True).replace(r'www\S+', ' ', regex=True)
+df['comment'] = df['comment_body'].str.replace('<a\s[^>]*.*?<\/a>', '')
 
 # Remove contractions
 df['comment'] = df['comment'].apply(lambda x: [contractions.fix(token) for token in str(x).split()])
@@ -209,21 +218,22 @@ df['comment'] = df['comment'].str.replace(',', ', ')  # Change words like perhap
 df['comment'] = df['comment'].str.replace('?', '? ')  # Change words like better?read to better? read
 df['comment'] = df['comment'].apply(remove_punctuation)  # Remove punctuation
 df['comment'] = df['comment'].str.replace('\d+', '')  # Remove numbers
-
+print("finsihed removing puncation")
 # sentiment of comments
 df['sentiment'] = df['comment'].map(lambda text: TextBlob(text).sentiment.polarity)
-
+print("finsihed calculated sentiment")
 
 # Tokenize
 df['comment'] = tokenize(df['comment'])
-
+print("finsihed tokenize")
 # Lemmatisation
 df['comment'] = df['comment'].apply(pos_tagging)
 df['comment'] = df['comment'].apply(change_pos_tag)
 df['comment'] = df['comment'].apply(lemmatise)
+print("finsihed lemmatise")
 df['comment'] = df['comment'].apply(lambda x: [token.lower() for token in x])
 df['comment'] = df['comment'].apply(remove_stopwords)
-
+print("finsihed removing stopwords")
 # cnt = display_most_frequentwords(df['commentBody'], 100)
 # print(cnt)
 # rarewords = most_rarewords(cnt, 100)
@@ -238,10 +248,11 @@ df['comment_count'] = df.groupby('article_id')['article_id'].transform('count') 
 df['gets_reply'] = df['comment_id'].apply(lambda x:
                                           has_reply(x, df.loc[df['depth'] == 2.0, [
                                               'parent_id']]))  # Indicates if a comment has received a reply
+print("finsihed getting replies")
 df['pub_length'] = df.apply(lambda x: (dt.datetime.fromtimestamp(int(x['approve_date'])) -
                                        dt.datetime.strptime(x['pub_date'], '%Y-%m-%d %H:%M:%S')).total_seconds(),
                             axis=1)  # Time between article published and comment posted
-
+print("finsihed pub length")
 # Preprocess keywords
 # Preprocess  section Name must group middle east and asia pacific together
 # unbalanced by the looks of it
