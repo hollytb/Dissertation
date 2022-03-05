@@ -32,13 +32,13 @@ def remove_nan_rows(curr_df):  # removes list of empty keywords and comments
     curr_df.dropna(inplace=True)
 
 #
-csv_files = ["data/featuresArticlesTest.csv", "data/featuresCommentsTest.csv"]
+csv_files = ["data/featuresArticlesTestMag.csv", "data/featuresCommentsTestMag.csv"]
 csv_no = 0
 for csv in csv_files:
     df = read_in_df(csv)
     normalise(df, csv_no)
     remove_nan_rows(df)
-    df.to_csv(path_or_buf=("data/normalised" + str(csv_no) + ".csv"), index=False)
+    df.to_csv(path_or_buf=("data/normalisedMag" + str(csv_no) + ".csv"), index=False)
 
     csv_no = csv_no + 1
     print('File ' + str(csv_no) + ' shape: ' + str(df.shape))

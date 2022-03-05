@@ -164,7 +164,7 @@ df_cM17 = pd.read_csv("data/cleanedCommentsM17.csv",
 df_aM17 = pd.read_csv("data/cleanedArticlesM17.csv", usecols=['articleID', 'articleWordCount', 'keywords', 'newDesk',
                                                               'pubDate', 'sectionName', 'typeOfMaterial'], index_col=0)
 df = pd.merge(df_aM17, df_cM17, on='articleID')  # Merge articles with corresponding comments
-#df = df.loc[df['newDesk'] == 'Magazine']
+df = df.loc[df['newDesk'] == 'Magazine']
 
 print(df.head())
 print(df.shape)
@@ -185,10 +185,10 @@ df.rename(
 
 
 
-s = df['new_desk'].value_counts()
-df = df[df.isin(s.index[s > 714]).values]
-df = df.groupby('new_desk', group_keys=False).apply(lambda x: x.sample(714))
-print(df['new_desk'].value_counts())
+#s = df['new_desk'].value_counts()
+#df = df[df.isin(s.index[s > 714]).values]
+#df = df.groupby('new_desk', group_keys=False).apply(lambda x: x.sample(714))
+#print(df['new_desk'].value_counts())
 
 print(df.head())
 print(df.tail())
@@ -267,10 +267,10 @@ df = pd.get_dummies(df, columns=['type_of_material', 'new_desk'])
 
 df.drop(columns=['approve_date', 'pub_date', 'depth', 'comment_id',
                  'text', 'comment_body', 'parent_id'], inplace=True)
-df.to_csv(path_or_buf="data/featuresCommentsTest.csv", index=False)
+df.to_csv(path_or_buf="data/featuresCommentsTestMag.csv", index=False)
 
 df.sort_values('article_id', inplace=True)
 df.drop_duplicates(subset="article_id", keep="first", inplace=True)
 df.drop(columns=['comment', 'gets_reply', 'question_mark', 'exclamation_mark',
                  'start_question', 'comment_word_count', 'recommendations', 'pub_length', 'sentiment'], inplace=True)
-df.to_csv(path_or_buf="data/featuresArticlesTest.csv", index=False)
+df.to_csv(path_or_buf="data/featuresArticlesTestMag.csv", index=False)
